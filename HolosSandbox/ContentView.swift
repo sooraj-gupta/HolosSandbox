@@ -1,26 +1,39 @@
-//
-//  ContentView.swift
-//  HolosSandbox
-//
-//  Created by Patron on 9/16/25.
-//
-
 import SwiftUI
 import RealityKit
-import RealityKitContent
 
 struct ContentView: View {
+    // State variables to control the immersive space
+    @Environment(\.openImmersiveSpace) var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) var dismissImmersiveSpace
+    @State private var isImmersiveSpaceShown = false
+
     var body: some View {
-        VStack {
-            Model3D(named: "Scene", bundle: realityKitContentBundle)
-                .padding(.bottom, 50)
+        VStack(spacing: 20) {
+            Text("Robot Control")
+                .font(.largeTitle)
+                .fontWeight(.bold)
 
-            Text("Hello, world!")
+            Text("Tap the button below to place the robot in your space and control its arm.")
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // A toggle to launch or close the immersive scene
+            Toggle(isImmersiveSpaceShown ? "Exit Immersive Space" : "Enter Immersive Space", isOn: $isImmersiveSpaceShown)
+                .toggleStyle(.button)
+                .font(.headline)
         }
-        .padding()
+        .padding(30)
+        .glassBackgroundEffect()
+        .onChange(of: isImmersiveSpaceShown) { _, newValue in
+            Task {
+                if newValue {
+                    // Open the immersive space with the specified ID.
+                    await openImmersiveSpace(id: "ImmersiveRobotSpace")
+                } else {
+                    // Close the immersive space.
+                    await dismissImmersiveSpace()
+                }
+            }
+        }
     }
-}
-
-#Preview(windowStyle: .automatic) {
-    ContentView()
 }
