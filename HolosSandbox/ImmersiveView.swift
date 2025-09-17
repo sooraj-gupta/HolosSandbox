@@ -20,7 +20,6 @@ struct ImmersiveView: View {
     
     var body: some View {
         RealityView { content in
-            // Load and setup the model
             do {
                 let model = try await ModelEntity(named: "character")
                 model.position = [0, 1.2, -2] // Adjusted Y for better viewing
@@ -42,8 +41,41 @@ struct ImmersiveView: View {
     }
     
     
-    private func easeInEaseOut(_ t: Float) -> Float {
-        return 0.5 * (1.0 - cos(t * .pi))
+    private func easeOutBack(_ t: Float) -> Float {
+        let c1: Float = 1.70158
+        let c3 = c1 + 1
+        return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2)
+    }
+
+    // Back ease in out - overshoots at both ends
+    private func easeInOutBack(_ t: Float) -> Float {
+        let c1: Float = 1.70158
+        let c2 = c1 * 1.525
+        
+        if t < 0.5 {
+            return (pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2
+        } else {
+            return (pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2
+        }
+    }
+
+    // Elastic ease out - bouncy overshoot (most dramatic)
+    private func easeOutElastic(_ t: Float) -> Float {
+        let c4 = (2 * Float.pi) / 3
+        
+        if t == 0 {
+            return 0
+        } else if t == 1 {
+            return 1
+        } else {
+            return pow(2, -10 * t) * sin((t * 10 - 0.75) * c4) + 1
+        }
+    }
+
+    // Custom overshoot - adjustable intensity
+    private func easeOutOvershoot(_ t: Float, overshoot: Float = 0.3) -> Float {
+        let scaledT = t - 1
+        return 1 + (1 + overshoot) * scaledT * scaledT * scaledT + overshoot * scaledT * scaledT
     }
     
     @MainActor
@@ -58,12 +90,9 @@ struct ImmersiveView: View {
             return
         }
         
-        // --- START OF FIX ---
-        
-        // 1. Create a dynamic starting pose from the model's current T-pose.
         var startingPoseTransforms: [String: Transform] = [:]
         var jointIndices: [String: Int] = [:]
-        let requiredJoints = [rightShoulderName, rightArmName, rightForearmName, rightHandName, headName]
+        let requiredJoints = [rightShoulderName, leftShoulderName, rightArmName, rightForearmName, rightHandName, headName]
 
         for jointName in requiredJoints {
             if let index = model.jointNames.firstIndex(of: jointName) {
@@ -73,20 +102,16 @@ struct ImmersiveView: View {
             }
         }
 
-        // 2. Replace the hardcoded first keyframe with our dynamic starting pose.
         if !animationKeyframes.isEmpty {
             animationKeyframes[0].pose = Pose(transforms: startingPoseTransforms)
         }
-        
-        // The old `originalTransforms` dictionary is no longer needed.
-        
-        // --- END OF FIX ---
+         
         
         var animationTime: TimeInterval = 0
         
         self.subscription = scene.subscribe(to: SceneEvents.Update.self) { event in
             animationTime += event.deltaTime
-            let loopedTime = animationTime.truncatingRemainder(dividingBy: 9)
+            let loopedTime = animationTime.truncatingRemainder(dividingBy: 12)
             
             guard let (prevKeyframe, nextKeyframe) = findKeyframes(for: loopedTime) else { return }
             
@@ -94,7 +119,7 @@ struct ImmersiveView: View {
             let rangeDuration = nextKeyframe.time - prevKeyframe.time
             // Prevent division by zero if keyframes have the same time
             let linearT = rangeDuration > 0 ? Float(timeInRange / rangeDuration) : 0
-            let easedT = easeInEaseOut(linearT)
+            let easedT = easeInOutBack(linearT)
             
             for (jointName, jointIndex) in jointIndices {
                 guard let prevTransform = prevKeyframe.pose.transforms[jointName],
@@ -155,6 +180,7 @@ struct ImmersiveView: View {
 
 // MARK: - Joint Names
 let rightShoulderName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint"
+let leftShoulderName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/left_shoulder_1_joint"
 let rightArmName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint"
 let rightForearmName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint/right_forearm_joint"
 let rightHandName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint/right_forearm_joint/right_hand_joint"
@@ -168,64 +194,94 @@ let restPose = Pose(transforms: [:])
 
 
 // MARK: - Animation Keyframes
-// This needs to be a `var` so we can modify the first frame at runtime.
 var animationKeyframes: [Keyframe] = [
-//    Keyframe(time: 0.0, pose: restPose), // This pose will be replaced
     Keyframe(time: 2.5, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
+        leftShoulderName: Transform(rotation: simd_quatf(angle: -.pi/4, axis: [-3, -3, -4])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
         rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
         rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0, 0]))
     ])),
     
+    
     Keyframe(time: 3, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
+//        leftShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0,-1,0])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
         rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, -0.3, 0.3]))
     ])),
+    
     
     Keyframe(time: 4, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.3, 0.3]))
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/3, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.6, 0.3]))
     ])),
+    
     
     Keyframe(time: 5, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
         rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, -0.3, 0.3]))
     ])),
     
     Keyframe(time: 6, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.3, 0.3]))
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/3, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.6, 0.3]))
     ])),
     Keyframe(time: 7, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
         rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
         rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0, 0]))
     ])),
     Keyframe(time: 8, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 1.312, axis: [0.01,-1,0.03])),
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,0.03])),
         rightArmName: Transform(rotation: simd_quatf(angle: 0, axis: [0,1,0])),
         rightForearmName: Transform(rotation: simd_quatf(angle: 0, axis: [0,0,1])),
         rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, 0, 0]))
     ])),
-//    Keyframe(time: 2.0, pose: waveLeftPose),
-//    Keyframe(time: 2.5, pose: waveRightPose),
-//    Keyframe(time: 3.0, pose: waveLeftPose),
-//    Keyframe(time: 3.5, pose: armRaisedPose),
-//    Keyframe(time: 4.0, pose: headNodPose),
-//    Keyframe(time: 4.5, pose: armRaisedPose), // Head returns to its raised-arm-pose rotation
-//    Keyframe(time: 5.0, pose: headNodPose),
-//    Keyframe(time: 5.5, pose: armRaisedPose), // Head returns again
     Keyframe(time: 9, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,0.53])),
+        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, 0, 0]))
+    ])),
+    
+    Keyframe(time: 9.5, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.23])),
+        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
+    ])),
+    
+    Keyframe(time: 9.7, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.13])),
+        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/1.9, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
+    ])),
+    
+    Keyframe(time: 9.9, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.23])),
+        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
+    ])),
+    
+    
+    Keyframe(time: 10.2, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.13])),
+        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/1.9, axis: [0,0,1])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
+    ])),
+    Keyframe(time: 12, pose: Pose(transforms: [
         rightShoulderName: Transform(rotation: simd_quatf(angle: 1.312, axis: [0.01,-1,0.03])),
         rightArmName: Transform(rotation: simd_quatf(angle: 0.261, axis: [0,-1,-0.06])),
         rightForearmName: Transform(rotation: simd_quatf(angle: 0.084, axis: [0,0,-1])),
