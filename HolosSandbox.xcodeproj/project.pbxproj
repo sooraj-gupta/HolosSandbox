@@ -7,11 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		313FD5FA2E7CC2240098DE2B /* lowpoly.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 313FD5F92E7CC2240098DE2B /* lowpoly.usdz */; };
+		3156A2CC2E7B70C4004C9269 /* hand_data_pivoted.csv in Resources */ = {isa = PBXBuildFile; fileRef = 3156A2CB2E7B70C3004C9269 /* hand_data_pivoted.csv */; };
 		317E235F2E79E7CC00453FA1 /* RealityKitContent in Frameworks */ = {isa = PBXBuildFile; productRef = 317E235E2E79E7CC00453FA1 /* RealityKitContent */; };
 		317E23782E7A0A1200453FA1 /* character.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 317E23772E7A0A1200453FA1 /* character.usdz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		313FD5F92E7CC2240098DE2B /* lowpoly.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = lowpoly.usdz; sourceTree = "<group>"; };
+		3156A2CB2E7B70C3004C9269 /* hand_data_pivoted.csv */ = {isa = PBXFileReference; lastKnownFileType = text; path = hand_data_pivoted.csv; sourceTree = "<group>"; };
 		317E23592E79E7CB00453FA1 /* HolosSandbox.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HolosSandbox.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		317E235D2E79E7CC00453FA1 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		317E23772E7A0A1200453FA1 /* character.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = character.usdz; sourceTree = "<group>"; };
@@ -53,6 +57,8 @@
 		317E23502E79E7CB00453FA1 = {
 			isa = PBXGroup;
 			children = (
+				313FD5F92E7CC2240098DE2B /* lowpoly.usdz */,
+				3156A2CB2E7B70C3004C9269 /* hand_data_pivoted.csv */,
 				317E23772E7A0A1200453FA1 /* character.usdz */,
 				317E235B2E79E7CB00453FA1 /* HolosSandbox */,
 				317E235C2E79E7CC00453FA1 /* Packages */,
@@ -141,6 +147,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3156A2CC2E7B70C4004C9269 /* hand_data_pivoted.csv in Resources */,
+				313FD5FA2E7CC2240098DE2B /* lowpoly.usdz in Resources */,
 				317E23782E7A0A1200453FA1 /* character.usdz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

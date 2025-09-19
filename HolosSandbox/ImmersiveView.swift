@@ -21,10 +21,10 @@ struct ImmersiveView: View {
     var body: some View {
         RealityView { content in
             do {
-                let model = try await ModelEntity(named: "character")
+                let model = try await ModelEntity(named: "lowpoly")
                 model.position = [0, 1.2, -2] // Adjusted Y for better viewing
-           
-                model.scale = [1.0, 1.0, 1.0]
+            
+                model.scale = [0.01,0.01,0.01]
                 
                 content.add(model)
                 
@@ -90,9 +90,24 @@ struct ImmersiveView: View {
             return
         }
         
+        // Print all available joint names
+        print("=== ALL JOINT NAMES ===")
+        for (index, jointName) in model.jointNames.enumerated() {
+            print("\(index): \(jointName)")
+        }
+        print("========================")
+        
         var startingPoseTransforms: [String: Transform] = [:]
         var jointIndices: [String: Int] = [:]
-        let requiredJoints = [rightShoulderName, leftShoulderName, rightArmName, rightForearmName, rightHandName, headName]
+        let requiredJoints = [
+            rightShoulderName, leftShoulderName, rightArmName, rightForearmName, rightHandName,
+            // All finger joints
+            rightMiddle1Name, rightMiddle2Name,
+            rightRing1Name, rightRing2Name,
+            rightPinky1Name, rightPinky2Name,
+            rightIndex1Name, rightIndex2Name,
+            rightThumb1Name, rightThumb2Name
+        ]
 
         for jointName in requiredJoints {
             if let index = model.jointNames.firstIndex(of: jointName) {
@@ -102,16 +117,17 @@ struct ImmersiveView: View {
             }
         }
 
+        // Dynamically set the first keyframe to the model's actual starting pose.
         if !animationKeyframes.isEmpty {
             animationKeyframes[0].pose = Pose(transforms: startingPoseTransforms)
         }
-         
+        
         
         var animationTime: TimeInterval = 0
         
         self.subscription = scene.subscribe(to: SceneEvents.Update.self) { event in
             animationTime += event.deltaTime
-            let loopedTime = animationTime.truncatingRemainder(dividingBy: 12)
+            let loopedTime = animationTime.truncatingRemainder(dividingBy: 15)
             
             guard let (prevKeyframe, nextKeyframe) = findKeyframes(for: loopedTime) else { return }
             
@@ -122,6 +138,8 @@ struct ImmersiveView: View {
             let easedT = easeInOutBack(linearT)
             
             for (jointName, jointIndex) in jointIndices {
+                // Ensure that both keyframes have a transform for the current joint.
+                // If a transform is missing, the joint will hold its previous state for that segment.
                 guard let prevTransform = prevKeyframe.pose.transforms[jointName],
                       let nextTransform = nextKeyframe.pose.transforms[jointName] else { continue }
                 
@@ -135,24 +153,6 @@ struct ImmersiveView: View {
                 model.jointTransforms[jointIndex] = newTransform
             }
             
-            print("--- Animation Frame - Time: \(String(format: "%.2f", loopedTime)) ---")
-            for (jointName, jointIndex) in jointIndices {
-                // 1. Get the current transform directly from the model
-                let currentTransform = model.jointTransforms[jointIndex]
-                
-                // 2. Get the rotation quaternion
-                let currentRotation = currentTransform.rotation
-                
-                // 3. Get the angle (in radians) and axis vector
-                let angle = currentRotation.angle
-                let axis = currentRotation.axis
-                
-                // 4. Print the formatted values
-                let jointDisplayName = jointName.split(separator: "/").last ?? ""
-                print("\(jointDisplayName):")
-                print(String(format: "  Angle: %.3f rad", angle))
-                print(String(format: "  Axis: [x: %.2f, y: %.2f, z: %.2f]", axis.x, axis.y, axis.z))
-            }
         } as! AnyCancellable
         
         animationPlaying = true
@@ -160,131 +160,225 @@ struct ImmersiveView: View {
     }
 
     private func findKeyframes(for time: TimeInterval) -> (Keyframe, Keyframe)? {
-        // Ensure keyframes are sorted by time, just in case.
-        let sortedKeyframes = animationKeyframes.sorted { $0.time < $1.time }
+        // Find the two keyframes to interpolate between for a given time.
         
-        if time < sortedKeyframes.first?.time ?? 0 {
-            return (sortedKeyframes.first!, sortedKeyframes.first!)
+        if time < animationKeyframes.first?.time ?? 0 {
+            // If before the first keyframe, hold the first keyframe's pose.
+            return (animationKeyframes.first!, animationKeyframes.first!)
         }
         
-        for i in 0..<(sortedKeyframes.count - 1) {
-            let current = sortedKeyframes[i]
-            let next = sortedKeyframes[i + 1]
+        for i in 0..<(animationKeyframes.count - 1) {
+            let current = animationKeyframes[i]
+            let next = animationKeyframes[i + 1]
             if time >= current.time && time <= next.time {
                 return (current, next)
             }
         }
-        return (sortedKeyframes.last!, sortedKeyframes.last!)
+        
+        // If past the last keyframe, hold the last keyframe's pose.
+        return (animationKeyframes.last!, animationKeyframes.last!)
     }
 }
 
-// MARK: - Joint Names
-let rightShoulderName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint"
-let leftShoulderName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/left_shoulder_1_joint"
-let rightArmName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint"
-let rightForearmName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint/right_forearm_joint"
-let rightHandName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/right_shoulder_1_joint/right_arm_joint/right_forearm_joint/right_hand_joint"
-let headName = "root/hips_joint/spine_1_joint/spine_2_joint/spine_3_joint/spine_4_joint/spine_5_joint/spine_6_joint/spine_7_joint/neck_1_joint/neck_2_joint/neck_3_joint/neck_4_joint/head_joint"
+// MARK: - Joint Names (Updated for lowpoly model)
+let rightShoulderName = "n9/n10/n14"
+let leftShoulderName = "n9/n10/n33"
+let rightArmName = "n9/n10/n14/n15"
+let rightForearmName = "n9/n10/n14/n15/n16"
+let rightHandName = "n9/n10/n14/n15/n16/n17"
+let headName = "n52"
 
-// MARK: - Animation Rotations
-let identityRotation = simd_quatf() // NOTE: This is only used for the head nod reset now.
+// All finger joints
+let rightMiddle1Name = "n9/n10/n14/n15/n16/n17/n18"
+let rightMiddle2Name = "n9/n10/n14/n15/n16/n17/n18/n19"
+let rightRing1Name = "n9/n10/n14/n15/n16/n17/n21"
+let rightRing2Name = "n9/n10/n14/n15/n16/n17/n21/n22"
+let rightPinky1Name = "n9/n10/n14/n15/n16/n17/n24"
+let rightPinky2Name = "n9/n10/n14/n15/n16/n17/n24/n25"
+let rightIndex1Name = "n9/n10/n14/n15/n16/n17/n27"
+let rightIndex2Name = "n9/n10/n14/n15/n16/n17/n27/n28"
+let rightThumb1Name = "n9/n10/n14/n15/n16/n17/n30"
+let rightThumb2Name = "n9/n10/n14/n15/n16/n17/n30/n31"
+
 // MARK: - Animation Poses
-// NOTE: The `restPose` is now dynamically created at runtime. This constant is used as a template.
+// NOTE: The first keyframe is now dynamically created at runtime to match the model's default pose.
 let restPose = Pose(transforms: [:])
-
 
 // MARK: - Animation Keyframes
 var animationKeyframes: [Keyframe] = [
-    Keyframe(time: 2.5, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-        leftShoulderName: Transform(rotation: simd_quatf(angle: -.pi/4, axis: [-3, -3, -4])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0, 0]))
+    
+    // Keyframe 1: Start Time / Rest Pose. This is dynamically populated at runtime.
+    Keyframe(time: 0.5, pose: restPose),
+        
+    
+    // Keyframe 2: Closed Fist
+    Keyframe(time: 2, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.2, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.1, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 1.2, axis: [0,0,-1])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 1.2, axis: [0,0,-1])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 1, axis: [-1,0,0])),
     ])),
-    
-    
+//        
+    // Keyframe 3: Point with Index Finger
     Keyframe(time: 3, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-//        leftShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0,-1,0])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, -0.3, 0.3]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.3, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.3, axis: [1,0,0])),
+
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 1, axis: [0,0,-1])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 0.7, axis: [-1,0,0])),
     ])),
-    
-    
+        
+    // Keyframe 4: Peace Sign (Index and Middle finger up)
     Keyframe(time: 4, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/3, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.6, 0.3]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.2, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.1, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 1, axis: [0,0,-1])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 0.7, axis: [-1,0,0])),
     ])),
-    
-    
+        
+    // Keyframe 5: Rock and Roll Sign (Index and Pinky up)
     Keyframe(time: 5, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, -0.3, 0.3]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.3, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.3, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 1.2, axis: [0,0,-1])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 0.7, axis: [-1,0,0])),
     ])),
-    
+        
+    // Keyframe 6: Thumbs Up
     Keyframe(time: 6, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/3, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0.6, 0.3]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.2, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.1, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 1.2, axis: [0,0,-1])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: 2, axis: [0,0,-1])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 0.5, axis: [1,0,0])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: -0.5, axis: [-1,0,0])),
     ])),
-    Keyframe(time: 7, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: .pi/4, axis: [-3, -3, -4])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [1, 0, 0]))
-    ])),
+    
+        
+    // Keyframe 8: Wave Motion 2 (Hand open again)
     Keyframe(time: 8, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,0.03])),
-        rightArmName: Transform(rotation: simd_quatf(angle: 0, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: 0, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, 0, 0]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.2, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.1, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 0.2, axis: [0,0,-1])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 0.2, axis: [-1,0,0])),
     ])),
-    Keyframe(time: 9, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,0.53])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, 0, 0]))
-    ])),
-    
-    Keyframe(time: 9.5, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.23])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
-    ])),
-    
-    Keyframe(time: 9.7, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.13])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/1.9, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
-    ])),
-    
-    Keyframe(time: 9.9, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.23])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/2.5, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
-    ])),
-    
-    
-    Keyframe(time: 10.2, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.5, axis: [0.01,-1,-0.13])),
-        rightArmName: Transform(rotation: simd_quatf(angle: .pi/8, axis: [0,1,0])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: -.pi/1.9, axis: [0,0,1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, -0.03, 0]))
-    ])),
+        
+
+        
+    // Keyframe 12: Finger Guns
     Keyframe(time: 12, pose: Pose(transforms: [
-        rightShoulderName: Transform(rotation: simd_quatf(angle: 1.312, axis: [0.01,-1,0.03])),
-        rightArmName: Transform(rotation: simd_quatf(angle: 0.261, axis: [0,-1,-0.06])),
-        rightForearmName: Transform(rotation: simd_quatf(angle: 0.084, axis: [0,0,-1])),
-        rightHandName: Transform(rotation: simd_quatf(angle: 1.571, axis: [-1, 0, 0]))
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.2, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.1, axis: [1,0,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 1.4, axis: [0,0,-1])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 2.0, axis: [0,0,-1])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])), // Point straight
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: -0.1, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 0.6, axis: [1,0,0])), // Thumb up
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: -0.5, axis: [-1,0,0])),
     ])),
+        
+    // Keyframe 13: Open hand, preparing for final wave
+    Keyframe(time: 12.6, pose: Pose(transforms: [
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 0.8, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -1.3, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 1.3, axis: [1,0,0])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 2.4, axis: [0.5,-1,0])),
+        // --- Fingers ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 0.3, axis: [1,0,0])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: -0.2, axis: [-1,0,0])),
+    ])),
+    
+//        
+    // Keyframe 14: Final pose to transition smoothly back to the start
+    Keyframe(time: 14.5, pose: Pose(transforms: [
+        // Return arm to a near-neutral position to blend with the start pose
+        rightShoulderName: Transform(rotation: simd_quatf(angle: 1.5, axis: [0, 0, -1])),
+        rightArmName: Transform(rotation: simd_quatf(angle: -0.1, axis: [0,1,0])),
+        rightForearmName: Transform(rotation: simd_quatf(angle: 0.1, axis: [1,0,0])),
+        rightHandName: Transform(rotation: simd_quatf(angle: 0, axis: [0,1,0])),
+        // --- Fingers (open and relaxed) ---
+        rightMiddle1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightMiddle2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightRing1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightRing2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightPinky1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightPinky2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightIndex2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightThumb1Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [1,0,0])),
+        rightThumb2Name: Transform(rotation: simd_quatf(angle: 0.0, axis: [-1,0,0])),
+    ]))
+    
 ]
