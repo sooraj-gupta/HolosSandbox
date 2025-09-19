@@ -13,7 +13,7 @@ struct HolosSandboxApp: App {
         // This defines the immersive space that can be opened from the ContentView.
         // It uses ImmersiveView to display the 3D content.
         ImmersiveSpace(id: "ImmersiveRobotSpace") {
-            ImmersiveView()
+            ImmersiveView() 
         }
     }
 }
